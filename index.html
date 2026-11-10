@@ -1,0 +1,703 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XRD Lab Simulator</title>
+<style>
+:root{--bg:#eef1f5;--panel:#fff;--ink:#1b2430;--muted:#5d6878;--line:#d5dbe4;--acc:#1f6feb;--acc2:#e7effd;--warn:#b54708;--ok:#067647;}
+*{box-sizing:border-box}
+body{margin:0;font:13px/1.4 "Segoe UI",system-ui,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+header{display:flex;align-items:center;gap:16px;padding:8px 14px;background:#17212f;color:#fff;flex-wrap:wrap}
+header h1{font-size:15px;margin:0;font-weight:600}
+header .meta{color:#a9b5c6;font-size:12px}
+header .clock{margin-left:auto;font-variant-numeric:tabular-nums;color:#d8e1ee}
+.wrap{display:grid;grid-template-columns:380px minmax(0,1fr);gap:10px;padding:10px}
+@media (max-width:900px){.wrap{grid-template-columns:1fr}}
+aside,main{display:flex;flex-direction:column;gap:10px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.card h2{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 8px;font-weight:600}
+label{color:var(--muted)}
+input[type=number],input[type=text],select{font:inherit;padding:3px 5px;border:1px solid var(--line);border-radius:4px;background:#fff;color:var(--ink)}
+input[type=number]{width:86px}
+button{font:inherit;padding:4px 10px;border:1px solid var(--line);border-radius:5px;background:#f7f9fc;color:var(--ink);cursor:pointer}
+button:hover{background:var(--acc2)}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+button.primary:hover{background:#1858c4}
+button:disabled{opacity:.45;cursor:default}
+button.on{background:var(--acc2);border-color:var(--acc);color:var(--acc)}
+.row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:4px 0}
+.grid2{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:4px 6px;align-items:center}
+table.gonio{border-collapse:collapse;width:100%}
+table.gonio td,table.gonio th{padding:2px 4px;text-align:left}
+table.gonio th{font-weight:500;color:var(--muted);font-size:12px}
+table.gonio td.cur{font-variant-numeric:tabular-nums;font-weight:600;width:90px}
+.sample-name{font-weight:600;font-size:14px}
+.desc{color:var(--muted);white-space:pre-wrap;margin-top:4px}
+.note{color:var(--muted);font-size:12px}
+.err{color:#b42318}
+.prog{height:6px;background:#e3e8ef;border-radius:3px;overflow:hidden;margin-top:6px}
+.prog div{height:100%;width:0;background:var(--acc)}
+.prog.busy div{width:35%;animation:slide 1.1s ease-in-out infinite}
+@keyframes slide{0%{margin-left:-35%}100%{margin-left:100%}}
+#plotWrap{position:relative;height:560px;background:#fff;border:1px solid var(--line);border-radius:6px}
+#plot{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair}
+.toolbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.toolbar .sep{width:1px;height:20px;background:var(--line);margin:0 4px}
+#readout{font-variant-numeric:tabular-nums;color:var(--muted);min-height:18px;margin-top:6px;font-size:12px}
+#results{font-family:Consolas,monospace;font-size:12px;white-space:pre-wrap;max-height:180px;overflow:auto;background:#f7f9fc;border:1px solid var(--line);border-radius:5px;padding:6px;min-height:40px}
+#history{max-height:220px;overflow:auto}
+.hist{display:flex;align-items:center;gap:6px;padding:3px 4px;border-radius:4px;cursor:pointer}
+.hist:hover{background:#f2f5fa}
+.hist.sel{background:var(--acc2)}
+.hist .t{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hist .x{color:var(--muted);border:none;background:none;padding:0 4px}
+#log{font-family:Consolas,monospace;font-size:11px;white-space:pre-wrap;max-height:160px;overflow:auto;color:var(--muted)}
+#checkModal{position:fixed;inset:0;background:rgba(15,23,36,.45);display:none;align-items:center;justify-content:center;z-index:10}
+#checkModal .box{background:#fff;border-radius:10px;padding:18px 20px;min-width:330px;max-width:92vw;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+#checkModal h3{margin:0 0 6px;font-size:15px}
+#tsBox{min-height:70px;margin:10px 0}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<header>
+  <h1>XRD Lab Simulator</h1>
+  <span class="meta">High-resolution diffractometer &middot; Cu K&alpha;<sub>1</sub> (&lambda; = 1.540598 &Aring;)</span>
+  <span class="clock" id="clock">Beam time used: 0 h 00 min 00 s</span>
+</header>
+
+<div class="wrap">
+<aside>
+  <div class="card">
+    <h2>Sample</h2>
+    <div class="row"><label>Your name</label><input type="text" id="who" placeholder="First Last" style="width:190px" autocomplete="name">
+      <button class="primary" id="btnWho">Open</button></div>
+    <div class="row"><label>Sample</label><select id="sampleSel" disabled style="min-width:160px"></select></div>
+    <div id="sampleInfo" class="note">Type your first and last name, the same way every time (your samples are made from it).</div>
+  </div>
+
+  <div class="card">
+    <h2>Instrument</h2>
+    <div class="row"><label>Incident optics</label>
+      <select id="optics">
+        <option value="ge4">Ge(220)&times;4 monochromator (12&Prime;)</option>
+        <option value="hyb">Mirror + Ge(220)&times;2 hybrid (25&Prime;, 8&times; flux)</option>
+      </select></div>
+    <div class="row"><label>Detector</label>
+      <select id="det">
+        <option value="open">Open detector (receiving slit)</option>
+        <option value="ta">Triple-axis analyzer Ge(220)&times;3 (12&Prime;)</option>
+      </select>
+      <span id="slitBox"><label>slit</label> <input type="number" id="slit" value="1.0" step="0.1" min="0.02" max="3" style="width:60px"> &deg;</span>
+    </div>
+    <div class="note">Open detector: integrates over ~slit width in 2&theta; (use for rocking curves). Analyzer: 12&Prime; acceptance in 2&theta; (use for 2&theta;&ndash;&omega; scans and RSMs).</div>
+  </div>
+
+  <div class="card">
+    <h2>Goniometer</h2>
+    <table class="gonio">
+      <tr><th>Axis</th><th>Current (&deg;)</th><th>Move to (&deg;)</th></tr>
+      <tr><td>2&theta;</td><td class="cur" id="cur_tth"></td><td><input type="number" id="tg_tth" step="0.001"></td></tr>
+      <tr><td>&omega;</td><td class="cur" id="cur_om"></td><td><input type="number" id="tg_om" step="0.001"></td></tr>
+      <tr><td>&phi;</td><td class="cur" id="cur_phi"></td><td><input type="number" id="tg_phi" step="0.1"></td></tr>
+      <tr><td>&chi;</td><td class="cur" id="cur_chi"></td><td><input type="number" id="tg_chi" step="0.1"></td></tr>
+    </table>
+    <div class="row"><button class="primary" id="btnMove">Move</button>
+      <button id="btnCount">Count</button> <input type="number" id="countT" value="1" step="0.1" min="0.1" max="60" style="width:56px"> s
+      <span id="countOut" style="font-weight:600"></span></div>
+    <div class="note">&omega; = angle between incident beam and sample surface; &chi; tilts the sample about the beam direction; &phi; rotates it about its surface normal.
+      <span id="countsLeft"></span></div>
+  </div>
+
+  <div class="card">
+    <h2>Scan</h2>
+    <div class="row"><select id="scType" style="width:100%">
+      <option value="omega">&omega; scan (rocking curve)</option>
+      <option value="2theta-omega">2&theta;&ndash;&omega; scan (coupled)</option>
+      <option value="2theta">2&theta; scan (detector only)</option>
+      <option value="phi">&phi; scan</option>
+      <option value="chi">&chi; scan</option>
+      <option value="rsm">Reciprocal space map (2&theta;&ndash;&omega; scans at stepped &omega;)</option>
+    </select></div>
+    <div id="lineFields">
+      <div class="row"><label><input type="checkbox" id="scRel" checked> Start/End relative to current position</label></div>
+      <div class="grid2">
+        <label>Start</label><input type="number" id="scStart" step="0.001">
+        <label>End</label><input type="number" id="scEnd" step="0.001">
+        <label>Step</label><input type="number" id="scStep" step="0.0005">
+        <label id="axLbl" class="note"></label><span></span>
+      </div>
+    </div>
+    <div id="rsmFields" class="hidden">
+      <div class="note">Centred on the current &omega;, 2&theta;. Each line is a 2&theta;&ndash;&omega; scan (&omega; moves half as much as 2&theta;), repeated at stepped &omega; offsets.</div>
+      <div class="grid2" style="margin-top:4px">
+        <label>&Delta;&omega; from</label><input type="number" id="rsW1" value="-0.5" step="0.01">
+        <label>to</label><input type="number" id="rsW2" value="0.5" step="0.01">
+        <label>&Delta;&omega; step</label><input type="number" id="rsWs" value="0.01" step="0.001">
+        <span></span><span></span>
+        <label>&Delta;2&theta; from</label><input type="number" id="rsS1" value="-1.5" step="0.01">
+        <label>to</label><input type="number" id="rsS2" value="1.5" step="0.01">
+        <label>&Delta;2&theta; step</label><input type="number" id="rsSs" value="0.015" step="0.001">
+      </div>
+    </div>
+    <div class="row"><label>Count time per step</label> <input type="number" id="scTime" value="0.5" step="0.1" min="0.01" max="60"> s</div>
+    <div id="scEst" class="note"></div>
+    <div class="row"><button class="primary" id="btnScan">Start scan</button></div>
+    <div class="prog" id="prog"><div id="progBar"></div></div>
+    <div id="scanMsg" class="note"></div>
+  </div>
+
+  <div class="card">
+    <h2>Instrument log</h2>
+    <div id="log"></div>
+    <div class="row"><button id="btnLog">Download log</button></div>
+  </div>
+</aside>
+
+<main>
+  <div class="card">
+    <div class="toolbar">
+      <button id="mZoom" class="on" title="Drag a box to zoom">Zoom</button>
+      <button id="mMeas" title="Line scan: drag over a peak to get position and FWHM. Map: drag a box around a peak">Measure peak</button>
+      <button id="mGoto" title="Click to move the goniometer to that point">Go to point</button>
+      <button id="btnReset">Reset view</button>
+      <span class="sep"></span>
+      <label id="logBox"><input type="checkbox" id="logY" checked> log intensity</label>
+      <span id="mapCtl" class="hidden">
+        <label>Axes</label> <select id="mapView"><option value="q">Q<sub>x</sub>, Q<sub>z</sub> (&Aring;&#8315;&#185;)</option><option value="ang">&omega;, 2&theta; (&deg;)</option></select>
+        <label>Colours</label> <select id="cmap"><option value="viridis">viridis</option><option value="classic">classic XRD</option><option value="gray">grey</option></select>
+        <label>decades shown</label> <input type="number" id="decades" value="5" min="1" max="8" step="0.5" style="width:52px">
+      </span>
+      <span class="sep"></span>
+      <button id="btnCSV">Export data (CSV)</button>
+      <button id="btnPNG">Save picture</button>
+    </div>
+    <div id="plotWrap"><canvas id="plot"></canvas></div>
+    <div id="readout"></div>
+    <div class="row note">&omega; offset used for Q conversion: <input type="number" id="omOff" value="0" step="0.001" style="width:80px">&deg;
+      (Q is computed from &omega; &minus; offset; set it from your alignment scan). Q = 4&pi; sin&theta;/&lambda;; Q<sub>x</sub> in-plane, Q<sub>z</sub> along the surface normal.</div>
+  </div>
+
+  <div class="card">
+    <h2>Measurements</h2>
+    <div id="results">Use "Measure peak" on a scan. Results are listed here and in the log.</div>
+  </div>
+
+  <div class="card">
+    <h2>Scans</h2>
+    <div id="history" class="note">No scans yet.</div>
+    <div class="note">Click a scan to show it. Tick "overlay" on line scans of the same type to plot them together.
+      Exported data files carry a check code that shows they were measured on your samples.</div>
+  </div>
+</main>
+</div>
+
+<div id="checkModal"><div class="box">
+  <h3>Quick human check</h3>
+  <div class="note" id="checkWhy">Each scan on the instrument needs a short check.</div>
+  <div id="tsBox"></div>
+  <div class="row" style="justify-content:flex-end"><button id="btnCheckCancel">Cancel</button></div>
+</div></div>
+
+<script>
+'use strict';
+// ---------------------------------------------------------------- settings (filled in once when the server is set up)
+const CONFIG = {
+  apiUrl: 'PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE',
+  turnstileSiteKey: 'PASTE_YOUR_TURNSTILE_SITE_KEY_HERE'
+};
+const DEV = location.hash === '#dev';   // local testing only: needs the server files next to this page
+
+const LAMBDA = 1.5405974, K = 2 * Math.PI / LAMBDA, D2R = Math.PI / 180;
+const $ = function (id) { return document.getElementById(id); };
+const st = {
+  who: '', samples: [], sample: null, pos: { tth: 30, om: 15, phi: 0, chi: 0 }, beam: 0,
+  scans: [], sel: -1, mode: 'zoom', running: false, view: null, logLines: [], nextId: 1, ticket: ''
+};
+const AX = { omega: 'ω', '2theta': '2θ', '2theta-omega': '2θ', phi: 'φ', chi: 'χ' };
+const SCAN_NAME = { omega: 'ω scan', '2theta': '2θ scan', '2theta-omega': '2θ–ω scan', phi: 'φ scan', chi: 'χ scan', rsm: 'RSM' };
+const DEFAULTS = { omega: [-0.3, 0.3, 0.002], '2theta-omega': [-2, 2, 0.005], '2theta': [-1, 1, 0.005], phi: [-180, 180, 0.5], chi: [-5, 5, 0.05] };
+const LIMITS = { tth: [0, 165], om: [-10, 170], phi: [-720, 720], chi: [-95, 95] };
+const MAX_POINTS = 60000;
+
+// ---------------------------------------------------------------- scan definition (identical copy of the server's cleanDef / rangeArr / buildPoints)
+const SCAN_TYPES = ['omega', '2theta', '2theta-omega', 'phi', 'chi', 'rsm'];
+function cleanDef(d) {
+  const r6 = function (x) { x = Number(x); if (!isFinite(x)) throw new Error('Scan settings must be numbers'); return Number(x.toFixed(6)); };
+  if (SCAN_TYPES.indexOf(d.type) < 0) throw new Error('Unknown scan type');
+  const o = { type: d.type, tth: r6(d.tth), om: r6(d.om), phi: r6(d.phi), chi: r6(d.chi), time: r6(d.time) };
+  if (d.type === 'rsm') { o.w1 = r6(d.w1); o.w2 = r6(d.w2); o.ws = r6(d.ws); o.s1 = r6(d.s1); o.s2 = r6(d.s2); o.ss = r6(d.ss); }
+  else { o.start = r6(d.start); o.end = r6(d.end); o.step = r6(d.step); }
+  return o;
+}
+function rangeArr(a, b, step) {
+  step = Math.abs(step); if (!(step > 0)) return [];
+  const n = Math.floor(Math.abs(b - a) / step + 1e-9), sg = b >= a ? 1 : -1, out = [];
+  for (let i = 0; i <= n; i++) out.push(a + sg * i * step);
+  return out;
+}
+function buildPoints(d) {
+  const p0 = { tth: d.tth, om: d.om, phi: d.phi, chi: d.chi }, pts = [];
+  if (d.type === 'rsm') {
+    const dws = rangeArr(d.w1, d.w2, d.ws), ss = rangeArr(d.s1, d.s2, d.ss);
+    dws.forEach(function (dw) { ss.forEach(function (s) { pts.push({ om: p0.om + dw + s / 2, tth: p0.tth + s, phi: p0.phi, chi: p0.chi }); }); });
+    return { pts: pts, dws: dws, ss: ss };
+  }
+  const xs = rangeArr(d.start, d.end, d.step);
+  xs.forEach(function (x) {
+    const p = { tth: p0.tth, om: p0.om, phi: p0.phi, chi: p0.chi };
+    if (d.type === 'omega') p.om = x; else if (d.type === '2theta') p.tth = x; else if (d.type === 'phi') p.phi = x; else if (d.type === 'chi') p.chi = x;
+    else { p.tth = x; p.om = p0.om + (x - p0.tth) / 2; }
+    pts.push(p);
+  });
+  return { pts: pts, xs: xs };
+}
+function angToQ(om, tth, omOff) {
+  const ai = (om - (omOff || 0)) * D2R, af = (tth - om + (omOff || 0)) * D2R;
+  return [K * (Math.cos(af) - Math.cos(ai)), K * (Math.sin(af) + Math.sin(ai))];
+}
+
+// ---------------------------------------------------------------- server connection and human check
+let devHandle = null;
+function loadScript(src) { return new Promise(function (ok, fail) { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = function () { fail(new Error('Could not load ' + src)); }; document.head.appendChild(s); }); }
+const ready = (function () {
+  const site = DEV ? '1x00000000000000000000AA' : CONFIG.turnstileSiteKey;   // Cloudflare's always-pass test key in dev mode
+  CONFIG.siteKey = site;
+  const ts = loadScript('https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit').catch(function () {});
+  if (!DEV) return ts;
+  const v = '?v=' + Date.now();   // always the current server files
+  return Promise.all([ts, loadScript('../server/core.js' + v).then(function () { return loadScript('../server/assignment.js' + v); }).then(function () { return loadScript('../server/api.js' + v); })]).then(function () {
+    const cache = {};
+    const env = { secret: 'dev-secret', verifyToken: function (t) { return !!t; }, cacheGet: function (k) { return cache[k]; }, cachePut: function (k, v) { cache[k] = v; },
+                  newId: function () { return Math.random().toString(36).slice(2); } };
+    devHandle = function (req) { return handle(JSON.parse(JSON.stringify(req)), env); };
+  });
+})();
+function callServer(req) {
+  return ready.then(function () {
+    if (DEV) return new Promise(function (ok) { setTimeout(function () { ok(devHandle(req)); }, 50); });
+    if (CONFIG.apiUrl.indexOf('http') !== 0) throw new Error('This page is not connected to a server yet (CONFIG.apiUrl).');
+    return fetch(CONFIG.apiUrl, { method: 'POST', body: JSON.stringify(req) }).then(function (r) {
+      if (!r.ok) throw new Error('Server error ' + r.status);
+      return r.json();
+    });
+  });
+}
+let checkCancel = null;
+function humanCheck(why) {
+  return ready.then(function () {
+    if (!window.turnstile) throw new Error('The human check could not load. Check your internet connection, allow challenges.cloudflare.com, and reload.');
+    return new Promise(function (ok, fail) {
+      const modal = $('checkModal'), box = $('tsBox'); let id = null;
+      $('checkWhy').textContent = why;
+      box.innerHTML = ''; modal.style.display = 'flex';
+      const close = function () { modal.style.display = 'none'; checkCancel = null; try { if (id !== null) turnstile.remove(id); } catch (e) {} };
+      checkCancel = function () { close(); fail(new Error('cancelled')); };
+      id = turnstile.render(box, {
+        sitekey: CONFIG.siteKey, action: 'scan',
+        callback: function (token) { close(); ok(token); },
+        'error-callback': function () { close(); fail(new Error('The human check failed. Try again; if it keeps failing, switch off VPN / strict tracking protection or use another browser.')); },
+        'expired-callback': function () { try { turnstile.reset(id); } catch (e) {} }
+      });
+    });
+  });
+}
+$('btnCheckCancel').onclick = function () { if (checkCancel) checkCancel(); };
+
+// ---------------------------------------------------------------- helpers
+function fmtBeam(s) { const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = Math.floor(s % 60); return h + ' h ' + String(m).padStart(2, '0') + ' min ' + String(x).padStart(2, '0') + ' s'; }
+function addBeam(s) { st.beam += s; $('clock').textContent = 'Beam time used: ' + fmtBeam(st.beam); }
+function log(msg) { const line = '[' + fmtBeam(st.beam) + '] ' + msg; st.logLines.push(line); const el = $('log'); el.textContent += line + '\n'; el.scrollTop = el.scrollHeight; }
+function download(name, text, type) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: type || 'text/plain' })); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+function num(id) { const v = parseFloat($(id).value); return isFinite(v) ? v : NaN; }
+function instCfg() { return { optics: $('optics').value, det: $('det').value, slit: num('slit') }; }
+function instLabel(c) { return (c.optics === 'hyb' ? 'hybrid mono' : 'Ge(220)x4') + ' + ' + (c.det === 'ta' ? 'analyzer' : 'open detector ' + c.slit + '°'); }
+function showPos() { ['tth', 'om', 'phi', 'chi'].forEach(function (k) { $('cur_' + k).textContent = st.pos[k].toFixed(k === 'phi' || k === 'chi' ? 2 : 4); }); }
+function result(text) { const el = $('results'); if (el.dataset.used !== '1') { el.textContent = ''; el.dataset.used = '1'; } el.textContent += text + '\n'; el.scrollTop = el.scrollHeight; log(text.replace(/\n/g, ' | ')); }
+function sampleObj() { return st.samples.find(function (s) { return s.id === st.sample; }); }
+function busy(on, msg) {
+  st.running = on; $('btnScan').disabled = on; $('btnCount').disabled = on; $('btnWho').disabled = on;
+  $('prog').classList.toggle('busy', on); $('scanMsg').textContent = msg || ''; $('scanMsg').classList.remove('err');
+}
+function fail(msg) { $('scanMsg').textContent = msg; $('scanMsg').classList.add('err'); }
+
+// ---------------------------------------------------------------- student name -> samples
+$('who').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('btnWho').click(); });
+$('btnWho').onclick = function () {
+  const who = $('who').value.trim().replace(/\s+/g, ' '); if (!who) return;
+  $('sampleInfo').textContent = 'Connecting…';
+  callServer({ action: 'info', name: who }).then(function (r) {
+    if (!r.ok) { $('sampleInfo').innerHTML = ''; const e = document.createElement('span'); e.className = 'err'; e.textContent = r.error; $('sampleInfo').append(e); return; }
+    st.who = who; st.samples = r.samples; st.ticket = '';
+    const sel = $('sampleSel'); sel.innerHTML = ''; sel.disabled = false;
+    r.samples.forEach(function (s) { const o = document.createElement('option'); o.value = s.id; o.textContent = s.name; sel.append(o); });
+    selectSample(r.samples[0].id);
+    log('Samples for ' + who + (r.title ? ' (' + r.title + ')' : ''));
+  }).catch(function (e) { $('sampleInfo').innerHTML = ''; const x = document.createElement('span'); x.className = 'err'; x.textContent = e.message; $('sampleInfo').append(x); });
+};
+function selectSample(id) {
+  st.sample = id; $('sampleSel').value = id; st.ticket = ''; $('countsLeft').textContent = '';
+  const s = sampleObj(); $('sampleInfo').innerHTML = '';
+  const n = document.createElement('div'); n.className = 'sample-name'; n.textContent = s.name;
+  const d = document.createElement('div'); d.className = 'desc'; d.textContent = s.description || '';
+  const c = document.createElement('div'); c.className = 'note'; c.style.marginTop = '4px';
+  c.textContent = s.sys === 'wz' ? 'Wurtzite, (0001) surface. At φ = 0 the in-plane [10-10] direction (nominally) points toward the X-ray source.'
+                                 : 'Cubic, (001) surface. At φ = 0 the in-plane [110] direction (nominally) points toward the X-ray source.';
+  const w = document.createElement('div'); w.className = 'note'; w.textContent = 'Samples for: ' + st.who;
+  $('sampleInfo').append(w, n, d, c);
+  log('Sample: ' + s.name);
+}
+$('sampleSel').onchange = function () { selectSample($('sampleSel').value); };
+function needSample() { if (!st.who || !st.sample) { alert('Enter your name and choose a sample first.'); return true; } return false; }
+
+// ---------------------------------------------------------------- goniometer
+function clampPos(k, v) { return Math.min(LIMITS[k][1], Math.max(LIMITS[k][0], v)); }
+function moveTo(p, quiet) {
+  ['tth', 'om', 'phi', 'chi'].forEach(function (k) { if (p[k] != null && isFinite(p[k])) st.pos[k] = clampPos(k, p[k]); $('tg_' + k).value = +st.pos[k].toFixed(4); });
+  showPos(); updateEstimate();
+  if (!quiet) log('Move to 2θ=' + st.pos.tth.toFixed(4) + ' ω=' + st.pos.om.toFixed(4) + ' φ=' + st.pos.phi.toFixed(2) + ' χ=' + st.pos.chi.toFixed(2));
+}
+$('btnMove').onclick = function () {
+  if (st.running) return;
+  const p = {}; ['tth', 'om', 'phi', 'chi'].forEach(function (k) { const v = num('tg_' + k); if (isFinite(v)) p[k] = v; });
+  moveTo(p);
+};
+$('btnCount').onclick = function () {
+  if (st.running || needSample()) return;
+  const t = Math.min(60, Math.max(0.1, num('countT') || 1)), p = Object.assign({}, st.pos), cfg = instCfg();
+  const req = { action: 'count', name: st.who, sample: st.sample, inst: cfg, pos: p, time: t, ticket: st.ticket };
+  busy(true, 'Counting…');
+  const go = function (token) { if (token) req.token = token; return callServer(req); };
+  go().then(function (r) {
+    if (r.needCheck) { busy(false); return humanCheck('One check unlocks the next single counts.').then(function (tok) { busy(true, 'Counting…'); return go(tok); }); }
+    return r;
+  }).then(function (r) {
+    busy(false);
+    if (!r.ok) { fail(r.error); return; }
+    st.ticket = r.ticket; addBeam(r.time);
+    $('countsLeft').textContent = r.left + ' single counts left before the next check.';
+    $('countOut').textContent = (r.counts / r.time).toFixed(r.counts / r.time < 100 ? 1 : 0) + ' cps' + (r.blocked ? ' (beam blocked by sample)' : '');
+    log('Count ' + r.time + ' s at 2θ=' + p.tth.toFixed(4) + ' ω=' + p.om.toFixed(4) + ' φ=' + p.phi.toFixed(2) + ' χ=' + p.chi.toFixed(2) + ': ' + r.counts + ' counts' + (r.blocked ? ' (beam blocked)' : ''));
+  }).catch(function (e) { busy(false); if (e.message !== 'cancelled') fail(e.message); });
+};
+
+// ---------------------------------------------------------------- scan setup
+function setScanType() {
+  const t = $('scType').value, rsm = t === 'rsm';
+  $('lineFields').classList.toggle('hidden', rsm); $('rsmFields').classList.toggle('hidden', !rsm);
+  if (!rsm) {
+    const d = DEFAULTS[t];
+    if ($('scRel').checked) { $('scStart').value = d[0]; $('scEnd').value = d[1]; }
+    else { const c = curAxis(t); $('scStart').value = +(c + d[0]).toFixed(4); $('scEnd').value = +(c + d[1]).toFixed(4); }
+    $('scStep').value = d[2];
+    $('axLbl').textContent = 'axis: ' + AX[t] + (t === '2theta-omega' ? ' (ω follows at half speed)' : '') + ', degrees';
+  }
+  updateEstimate();
+}
+function curAxis(t) { return { omega: st.pos.om, '2theta': st.pos.tth, '2theta-omega': st.pos.tth, phi: st.pos.phi, chi: st.pos.chi }[t]; }
+$('scType').onchange = setScanType;
+$('scRel').onchange = function () {
+  const t = $('scType').value; if (t === 'rsm') return;
+  const c = curAxis(t), s = num('scStart'), e = num('scEnd');
+  if ($('scRel').checked) { $('scStart').value = +(s - c).toFixed(4); $('scEnd').value = +(e - c).toFixed(4); }
+  else { $('scStart').value = +(s + c).toFixed(4); $('scEnd').value = +(e + c).toFixed(4); }
+};
+function buildDef() {
+  const t = $('scType').value, p = st.pos, d = { type: t, tth: p.tth, om: p.om, phi: p.phi, chi: p.chi, time: num('scTime') };
+  if (t === 'rsm') Object.assign(d, { w1: num('rsW1'), w2: num('rsW2'), ws: num('rsWs'), s1: num('rsS1'), s2: num('rsS2'), ss: num('rsSs') });
+  else { const off = $('scRel').checked ? curAxis(t) : 0; Object.assign(d, { start: num('scStart') + off, end: num('scEnd') + off, step: num('scStep') }); }
+  return cleanDef(d);
+}
+function updateEstimate() {
+  try { const d = buildDef(), n = buildPoints(d).pts.length; $('scEst').textContent = n ? n + ' points, beam time ≈ ' + fmtBeam(n * (d.time + 0.02)) : 'Check the scan range and step.'; }
+  catch (e) { $('scEst').textContent = 'Check the scan settings.'; }
+}
+['scStart', 'scEnd', 'scStep', 'scTime', 'rsW1', 'rsW2', 'rsWs', 'rsS1', 'rsS2', 'rsSs'].forEach(function (id) { $(id).addEventListener('input', updateEstimate); });
+
+$('btnScan').onclick = function () {
+  if (st.running || needSample()) return;
+  let def; try { def = buildDef(); } catch (e) { alert(e.message); return; }
+  const built = buildPoints(def), N = built.pts.length;
+  if (!N) { alert('Check the scan range and step.'); return; }
+  if (!(def.time > 0 && def.time <= 60)) { alert('Count time per step must be between 0 and 60 s.'); return; }
+  if (N > MAX_POINTS) { alert('Too many points (' + N + '). Use a coarser step.'); return; }
+  for (const p of built.pts) for (const k of ['tth', 'om', 'chi']) if (p[k] < LIMITS[k][0] || p[k] > LIMITS[k][1]) { alert('Scan goes outside the goniometer range (' + k + ').'); return; }
+  const cfg = instCfg(), s = sampleObj();
+  humanCheck('One check per scan (' + N + ' points).').then(function (token) {
+    busy(true, 'Measuring ' + N + ' points…');
+    return callServer({ action: 'scan', name: st.who, sample: st.sample, inst: cfg, def: def, token: token });
+  }).then(function (r) {
+    busy(false);
+    if (!r.ok) { fail(r.error); return; }
+    if (r.counts.length !== N) { fail('Unexpected answer from the server (point count).'); return; }
+    const rec = { id: st.nextId++, type: def.type, p0: { tth: def.tth, om: def.om, phi: def.phi, chi: def.chi }, time: def.time, inst: instLabel(cfg),
+                  sample: s.name, sampleId: st.sample, who: st.who, pts: built.pts, defStr: r.def, instStr: r.inst, stamp: r.stamp,
+                  counts: Float64Array.from(r.counts), cps: Float64Array.from(r.counts, function (c) { return c / def.time; }), overlay: false };
+    if (def.type === 'rsm') { rec.dws = built.dws; rec.ss = built.ss; } else rec.xs = built.xs;
+    st.scans.push(rec); st.sel = st.scans.length - 1; st.view = null;
+    addBeam(N * (def.time + 0.02));
+    log('Scan #' + rec.id + ' ' + SCAN_NAME[def.type] + ' (' + N + ' pts, ' + def.time + ' s/pt, ' + rec.inst + ') ' + r.def + ' check ' + r.stamp);
+    renderHistory(); draw();
+  }).catch(function (e) { busy(false); if (e.message !== 'cancelled') fail(e.message); });
+};
+
+// ---------------------------------------------------------------- history
+function scanTitle(r) {
+  const p = r.p0;
+  if (r.type === 'rsm') return '#' + r.id + ' RSM at 2θ=' + p.tth.toFixed(3) + ' ω=' + p.om.toFixed(3) + ' φ=' + p.phi.toFixed(1) + ' χ=' + p.chi.toFixed(1);
+  const fixed = r.type === 'omega' ? '2θ=' + p.tth.toFixed(3) : r.type === '2theta' ? 'ω=' + p.om.toFixed(3) : r.type === '2theta-omega' ? 'ω₀=' + p.om.toFixed(3) : '2θ=' + p.tth.toFixed(3) + ' ω=' + p.om.toFixed(3);
+  return '#' + r.id + ' ' + SCAN_NAME[r.type] + ' ' + fixed + ' φ=' + p.phi.toFixed(1) + ' χ=' + p.chi.toFixed(1);
+}
+function renderHistory() {
+  const h = $('history'); h.innerHTML = '';
+  if (!st.scans.length) { h.textContent = 'No scans yet.'; return; }
+  st.scans.forEach(function (r, i) {
+    const d = document.createElement('div'); d.className = 'hist' + (i === st.sel ? ' sel' : '');
+    const t = document.createElement('span'); t.className = 't'; t.textContent = scanTitle(r) + '  [' + r.inst + ', ' + r.time + ' s/pt, ' + r.sample + ']'; t.title = t.textContent;
+    d.append(t);
+    if (r.type !== 'rsm') {
+      const lb = document.createElement('label'); const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = r.overlay;
+      cb.onclick = function (e) { e.stopPropagation(); r.overlay = cb.checked; draw(); };
+      lb.append(cb, ' overlay'); lb.onclick = function (e) { e.stopPropagation(); }; d.append(lb);
+    }
+    const x = document.createElement('button'); x.className = 'x'; x.textContent = '✕'; x.title = 'Delete scan';
+    x.onclick = function (e) { e.stopPropagation(); if (!confirm('Delete scan #' + r.id + '?')) return; st.scans.splice(i, 1); if (st.sel >= st.scans.length) st.sel = st.scans.length - 1; st.view = null; renderHistory(); draw(); };
+    d.append(x);
+    d.onclick = function () { st.sel = i; st.view = null; renderHistory(); draw(); };
+    h.append(d);
+  });
+}
+
+// ---------------------------------------------------------------- plotting
+const cv = $('plot'), ctx = cv.getContext('2d');
+const PAD = { l: 78, r: 24, t: 18, b: 52 };
+let geomCache = null, drag = null;
+function resizeCanvas() { const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1; cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); draw(); }
+window.addEventListener('resize', resizeCanvas);
+function niceTicks(lo, hi, n) {
+  const span = hi - lo; if (!(span > 0)) return { t: [lo], dec: 2 };
+  let step = Math.pow(10, Math.floor(Math.log10(span / n))); const e = span / n / step;
+  if (e >= 7.5) step *= 10; else if (e >= 3.5) step *= 5; else if (e >= 1.5) step *= 2;
+  const t = []; for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-6; v += step) t.push(v);
+  return { t: t, dec: Math.max(0, -Math.floor(Math.log10(step) + 1e-9)) };
+}
+const CMAPS = {
+  viridis: [[68, 1, 84], [72, 40, 120], [62, 74, 137], [49, 104, 142], [38, 130, 142], [31, 158, 137], [53, 183, 121], [109, 205, 89], [180, 222, 44], [253, 231, 37]],
+  classic: [[255, 255, 255], [190, 210, 255], [60, 90, 230], [0, 170, 230], [0, 200, 120], [150, 220, 0], [255, 230, 0], [255, 140, 0], [230, 30, 0], [130, 0, 0]],
+  gray: [[255, 255, 255], [0, 0, 0]]
+};
+function cmapColor(name, f) {
+  const c = CMAPS[name], x = Math.min(1, Math.max(0, f)) * (c.length - 1), i = Math.min(c.length - 2, Math.floor(x)), u = x - i;
+  return 'rgb(' + [0, 1, 2].map(function (k) { return Math.round(c[i][k] + (c[i + 1][k] - c[i][k]) * u); }).join(',') + ')';
+}
+function plotBox() { const r = cv.getBoundingClientRect(); return { x0: PAD.l, x1: r.width - PAD.r - (isMap() ? 70 : 0), y0: PAD.t, y1: r.height - PAD.b, w: r.width, h: r.height }; }
+function isMap() { const r = st.scans[st.sel]; return r && r.type === 'rsm'; }
+function drawAxes(B, v, xl, yl, logY) {
+  ctx.strokeStyle = '#8a95a5'; ctx.lineWidth = 1; ctx.strokeRect(B.x0, B.y0, B.x1 - B.x0, B.y1 - B.y0);
+  ctx.fillStyle = '#334'; ctx.font = '11px Segoe UI, Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  const X = function (x) { return B.x0 + (x - v.x0) / (v.x1 - v.x0) * (B.x1 - B.x0); }, Y = function (y) { return B.y1 - (y - v.y0) / (v.y1 - v.y0) * (B.y1 - B.y0); };
+  const tx = niceTicks(v.x0, v.x1, 8);
+  tx.t.forEach(function (t) { const x = X(t); ctx.beginPath(); ctx.moveTo(x, B.y1); ctx.lineTo(x, B.y1 + 4); ctx.stroke(); ctx.fillText(t.toFixed(tx.dec), x, B.y1 + 6);
+    ctx.strokeStyle = 'rgba(120,130,150,0.15)'; ctx.beginPath(); ctx.moveTo(x, B.y0); ctx.lineTo(x, B.y1); ctx.stroke(); ctx.strokeStyle = '#8a95a5'; });
+  ctx.font = '12px Segoe UI, Arial'; ctx.fillText(xl, (B.x0 + B.x1) / 2, B.y1 + 26);
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.font = '11px Segoe UI, Arial';
+  if (logY) {
+    for (let d = Math.ceil(v.y0); d <= Math.floor(v.y1); d++) {
+      const y = Y(d); ctx.beginPath(); ctx.moveTo(B.x0 - 4, y); ctx.lineTo(B.x0, y); ctx.stroke();
+      ctx.strokeStyle = 'rgba(120,130,150,0.15)'; ctx.beginPath(); ctx.moveTo(B.x0, y); ctx.lineTo(B.x1, y); ctx.stroke(); ctx.strokeStyle = '#8a95a5';
+      ctx.font = '11px Segoe UI, Arial'; ctx.fillText('10', B.x0 - 12, y + 2); ctx.font = '9px Segoe UI, Arial'; ctx.textAlign = 'left'; ctx.fillText(String(d), B.x0 - 12, y - 4); ctx.textAlign = 'right';
+      for (let m = 2; m < 10; m++) { const ym = Y(d + Math.log10(m)); if (ym > B.y0 && ym < B.y1) { ctx.beginPath(); ctx.moveTo(B.x0 - 2, ym); ctx.lineTo(B.x0, ym); ctx.stroke(); } }
+    }
+  } else {
+    const ty = niceTicks(v.y0, v.y1, 6);
+    ty.t.forEach(function (t) { const y = Y(t); ctx.beginPath(); ctx.moveTo(B.x0 - 4, y); ctx.lineTo(B.x0, y); ctx.stroke(); ctx.fillText(t.toFixed(ty.dec), B.x0 - 6, y);
+      ctx.strokeStyle = 'rgba(120,130,150,0.15)'; ctx.beginPath(); ctx.moveTo(B.x0, y); ctx.lineTo(B.x1, y); ctx.stroke(); ctx.strokeStyle = '#8a95a5'; });
+  }
+  ctx.save(); ctx.translate(16, (B.y0 + B.y1) / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'center'; ctx.font = '12px Segoe UI, Arial'; ctx.fillText(yl, 0, 0); ctx.restore();
+  return { X: X, Y: Y };
+}
+const SERIES_COLORS = ['#1f6feb', '#d1242f', '#1a7f37', '#9a6700', '#8250df', '#bf3989', '#0a7ea4'];
+function lineSeries() {
+  const r = st.scans[st.sel]; if (!r) return [];
+  const list = [r].concat(st.scans.filter(function (s) { return s !== r && s.overlay && s.type === r.type; }));
+  return list.map(function (s, i) { return { rec: s, color: SERIES_COLORS[i % SERIES_COLORS.length] }; });
+}
+function draw() {
+  const B = plotBox(); ctx.clearRect(0, 0, B.w, B.h); geomCache = null;
+  const r = st.scans[st.sel];
+  $('mapCtl').classList.toggle('hidden', !isMap()); $('logBox').classList.toggle('hidden', isMap());
+  if (!r) { ctx.fillStyle = '#8a95a5'; ctx.font = '14px Segoe UI, Arial'; ctx.textAlign = 'center'; ctx.fillText('Enter your name, move the goniometer and run a scan.', B.w / 2, B.h / 2); return; }
+  if (r.type === 'rsm') drawMap(r, B); else drawLine(B);
+  if (drag && drag.x1 != null) {
+    ctx.strokeStyle = st.mode === 'meas' ? '#d1242f' : '#1f6feb'; ctx.setLineDash([4, 3]); ctx.lineWidth = 1;
+    if (!isMap() && st.mode === 'meas') ctx.strokeRect(Math.min(drag.x0, drag.x1), B.y0, Math.abs(drag.x1 - drag.x0), B.y1 - B.y0);
+    else ctx.strokeRect(Math.min(drag.x0, drag.x1), Math.min(drag.y0, drag.y1), Math.abs(drag.x1 - drag.x0), Math.abs(drag.y1 - drag.y0));
+    ctx.setLineDash([]);
+  }
+}
+function drawLine(B) {
+  const ser = lineSeries(), logY = $('logY').checked, r = ser[0].rec;
+  if (!st.view) {
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    ser.forEach(function (s) { s.rec.xs.forEach(function (x, i) { const y = s.rec.cps[i]; x0 = Math.min(x0, x); x1 = Math.max(x1, x);
+      if (isFinite(y)) { const yy = logY ? Math.log10(Math.max(y, 0.05)) : y; y0 = Math.min(y0, yy); y1 = Math.max(y1, yy); } }); });
+    if (!isFinite(y0)) { y0 = logY ? -1 : 0; y1 = logY ? 2 : 1; }
+    if (logY) { y0 = Math.floor(y0); y1 = Math.ceil(y1 + 0.1); } else { y0 = 0; y1 = y1 * 1.08 || 1; }
+    if (x1 === x0) { x0 -= 1; x1 += 1; }
+    st.view = { x0: x0, x1: x1, y0: y0, y1: y1, logY: logY };
+  }
+  const v = st.view, T = drawAxes(B, v, AX[r.type] + ' (°)' + (r.type === '2theta-omega' ? '   [coupled 2θ–ω]' : ''), 'Intensity (counts/s)', logY);
+  ctx.save(); ctx.beginPath(); ctx.rect(B.x0, B.y0, B.x1 - B.x0, B.y1 - B.y0); ctx.clip();
+  ser.forEach(function (s) {
+    ctx.strokeStyle = s.color; ctx.lineWidth = 1.3; ctx.beginPath(); let pen = false;
+    s.rec.xs.forEach(function (x, i) { const y = s.rec.cps[i]; if (!isFinite(y)) { pen = false; return; }
+      const py = T.Y(logY ? Math.log10(Math.max(y, 0.05)) : y), px = T.X(x); if (pen) ctx.lineTo(px, py); else { ctx.moveTo(px, py); pen = true; } });
+    ctx.stroke();
+  });
+  ctx.restore();
+  if (ser.length > 1) {
+    ctx.font = '11px Segoe UI, Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ser.forEach(function (s, i) { ctx.fillStyle = s.color; ctx.fillRect(B.x1 - 210, B.y0 + 10 + i * 15, 12, 3); ctx.fillStyle = '#334'; ctx.fillText(scanTitle(s.rec).slice(0, 34), B.x1 - 194, B.y0 + 11 + i * 15); });
+  }
+  geomCache = { kind: 'line', T: T, B: B, v: v, logY: logY };
+}
+function mapXY(r, dw, s, view, off) {
+  const om = r.p0.om + dw + s / 2, tth = r.p0.tth + s;
+  if (view === 'ang') return [om, tth];
+  return angToQ(om, tth, off);
+}
+function drawMap(r, B) {
+  const view = $('mapView').value, off = num('omOff') || 0, cmap = $('cmap').value, dec = num('decades') || 5;
+  const nw = r.dws.length, ns = r.ss.length, hw = nw > 1 ? (r.dws[1] - r.dws[0]) / 2 : 0.005, hs = ns > 1 ? (r.ss[1] - r.ss[0]) / 2 : 0.005;
+  if (!st.view || st.view.mapView !== view || st.view.off !== off) {
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    [[0, 0], [nw - 1, 0], [0, ns - 1], [nw - 1, ns - 1]].forEach(function (c) { [-1, 1].forEach(function (a) { [-1, 1].forEach(function (b) {
+      const p = mapXY(r, r.dws[c[0]] + a * hw, r.ss[c[1]] + b * hs, view, off); x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }); }); });
+    st.view = { x0: x0, x1: x1, y0: y0, y1: y1, mapView: view, off: off };
+  }
+  const v = st.view;
+  let vmax = 0; for (let i = 0; i < r.cps.length; i++) if (r.cps[i] > vmax) vmax = r.cps[i];
+  const lmax = Math.log10(Math.max(vmax, 1)), lmin = lmax - dec;
+  const T = drawAxes(B, v, view === 'ang' ? 'ω (°)' : 'Qx (Å⁻¹)', view === 'ang' ? '2θ (°)' : 'Qz (Å⁻¹)', false);
+  ctx.save(); ctx.beginPath(); ctx.rect(B.x0, B.y0, B.x1 - B.x0, B.y1 - B.y0); ctx.clip();
+  const sx = new Float32Array(nw * ns), sy = new Float32Array(nw * ns);
+  for (let i = 0; i < nw; i++) for (let j = 0; j < ns; j++) {
+    const k = i * ns + j, c = mapXY(r, r.dws[i], r.ss[j], view, off); sx[k] = T.X(c[0]); sy[k] = T.Y(c[1]);
+    const val = r.cps[k]; if (!isFinite(val)) continue;
+    const f = (Math.log10(Math.max(val, 1e-3)) - lmin) / (lmax - lmin);
+    ctx.fillStyle = ctx.strokeStyle = cmapColor(cmap, f); ctx.lineWidth = 0.8; ctx.beginPath();
+    [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(function (q, n) { const p = mapXY(r, r.dws[i] + q[0] * hw, r.ss[j] + q[1] * hs, view, off), X = T.X(p[0]), Y = T.Y(p[1]); if (n) ctx.lineTo(X, Y); else ctx.moveTo(X, Y); });
+    ctx.closePath(); ctx.fill(); ctx.stroke();   // stroke in the same colour hides anti-aliasing seams
+  }
+  ctx.restore();
+  const cx = B.x1 + 16, cw = 14;
+  for (let y = B.y0; y < B.y1; y++) { ctx.fillStyle = cmapColor(cmap, 1 - (y - B.y0) / (B.y1 - B.y0)); ctx.fillRect(cx, y, cw, 1.5); }
+  ctx.strokeStyle = '#8a95a5'; ctx.strokeRect(cx, B.y0, cw, B.y1 - B.y0);
+  ctx.fillStyle = '#334'; ctx.font = '10px Segoe UI, Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  for (let d = Math.ceil(lmin); d <= Math.floor(lmax); d++) { const y = B.y1 - (d - lmin) / (lmax - lmin) * (B.y1 - B.y0); ctx.fillText('1e' + d, cx + cw + 3, y); }
+  ctx.save(); ctx.translate(B.w - 8, (B.y0 + B.y1) / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'center'; ctx.font = '11px Segoe UI, Arial'; ctx.fillText('counts/s', 0, 0); ctx.restore();
+  geomCache = { kind: 'map', T: T, B: B, v: v, sx: sx, sy: sy, rec: r, view: view, off: off };
+}
+function toData(px, py) { const g = geomCache, B = g.B, v = g.v; return [v.x0 + (px - B.x0) / (B.x1 - B.x0) * (v.x1 - v.x0), v.y0 + (B.y1 - py) / (B.y1 - B.y0) * (v.y1 - v.y0)]; }
+function nearestMap(px, py) { const g = geomCache; let best = -1, bd = Infinity; for (let k = 0; k < g.sx.length; k++) { const d = (g.sx[k] - px) * (g.sx[k] - px) + (g.sy[k] - py) * (g.sy[k] - py); if (d < bd && isFinite(g.rec.cps[k])) { bd = d; best = k; } } return best; }
+function nearestLine(x) { const r = st.scans[st.sel]; let best = -1, bd = Infinity; r.xs.forEach(function (v, i) { const d = Math.abs(v - x); if (d < bd && isFinite(r.cps[i])) { bd = d; best = i; } }); return best; }
+function mapPoint(r, k) { const p = r.pts[k], q = angToQ(p.om, p.tth, num('omOff') || 0); return { om: p.om, tth: p.tth, qx: q[0], qz: q[1], cps: r.cps[k] }; }
+function inBox(px, py) { const g = geomCache; return g && px >= g.B.x0 && px <= g.B.x1 && py >= g.B.y0 && py <= g.B.y1; }
+function evPos(e) { const rc = cv.getBoundingClientRect(); return [e.clientX - rc.left, e.clientY - rc.top]; }
+
+cv.addEventListener('mousemove', function (e) {
+  const p = evPos(e);
+  if (drag) { drag.x1 = p[0]; drag.y1 = p[1]; draw(); }
+  if (!geomCache || !inBox(p[0], p[1])) { $('readout').textContent = ''; return; }
+  const r = st.scans[st.sel];
+  if (geomCache.kind === 'map') {
+    const k = nearestMap(p[0], p[1]); if (k < 0) return; const m = mapPoint(r, k);
+    $('readout').textContent = 'ω = ' + m.om.toFixed(4) + '°   2θ = ' + m.tth.toFixed(4) + '°   Qx = ' + m.qx.toFixed(5) + ' Å⁻¹   Qz = ' + m.qz.toFixed(5) + ' Å⁻¹   I = ' + m.cps.toFixed(m.cps < 100 ? 1 : 0) + ' cps';
+  } else {
+    const d = toData(p[0], p[1]), k = nearestLine(d[0]); if (k < 0) return; const pt = r.pts[k];
+    $('readout').textContent = AX[r.type] + ' = ' + r.xs[k].toFixed(4) + '°   (2θ = ' + pt.tth.toFixed(4) + ', ω = ' + pt.om.toFixed(4) + ', φ = ' + pt.phi.toFixed(2) + ', χ = ' + pt.chi.toFixed(2) + ')   I = ' + r.cps[k].toFixed(r.cps[k] < 100 ? 1 : 0) + ' cps';
+  }
+});
+cv.addEventListener('mousedown', function (e) { const p = evPos(e); if (!geomCache || !inBox(p[0], p[1])) return; drag = { x0: p[0], y0: p[1], x1: null, y1: null }; });
+window.addEventListener('mouseup', function (e) {
+  if (!drag) return; const d = drag; drag = null;
+  const p = evPos(e), r = st.scans[st.sel]; if (!r || !geomCache) { draw(); return; }
+  const moved = d.x1 != null && (Math.abs(d.x1 - d.x0) > 4 || Math.abs(d.y1 - d.y0) > 4);
+  if (st.mode === 'zoom') {
+    if (moved) { const a = toData(Math.min(d.x0, d.x1), Math.max(d.y0, d.y1)), b = toData(Math.max(d.x0, d.x1), Math.min(d.y0, d.y1)); Object.assign(st.view, { x0: a[0], x1: b[0], y0: a[1], y1: b[1] }); }
+  } else if (st.mode === 'goto') {
+    if (st.running) { draw(); return; }
+    if (geomCache.kind === 'map') { const k = nearestMap(p[0], p[1]); if (k >= 0) moveTo({ om: r.pts[k].om, tth: r.pts[k].tth, phi: r.pts[k].phi, chi: r.pts[k].chi }); }
+    else { const k = nearestLine(toData(p[0], p[1])[0]); if (k >= 0) { const q = r.pts[k]; moveTo({ om: q.om, tth: q.tth, phi: q.phi, chi: q.chi }); } }
+  } else if (st.mode === 'meas') {
+    if (geomCache.kind === 'map') measureMap(r, d, p, moved); else if (moved) measureLine(r, toData(Math.min(d.x0, d.x1), 0)[0], toData(Math.max(d.x0, d.x1), 0)[0]);
+  }
+  draw();
+});
+function measureLine(r, xa, xb) {
+  const idx = []; r.xs.forEach(function (x, i) { if (x >= xa && x <= xb && isFinite(r.cps[i])) idx.push(i); });
+  if (idx.length < 5) { result('Select a wider range (at least 5 points).'); return; }
+  let im = idx[0]; idx.forEach(function (i) { if (r.cps[i] > r.cps[im]) im = i; });
+  const ymax = r.cps[im], bg = Math.min(r.cps[idx[0]], r.cps[idx[idx.length - 1]]), half = bg + (ymax - bg) / 2;
+  const cross = function (dir) { let i = im; while (true) { const j = i + dir; if (idx.indexOf(j) < 0) return null; if (r.cps[j] < half) { const f = (r.cps[i] - half) / (r.cps[i] - r.cps[j]); return r.xs[i] + f * (r.xs[j] - r.xs[i]); } i = j; } };
+  const xl = cross(-1), xr = cross(1);
+  let sw = 0, sx = 0; idx.forEach(function (i) { const w = Math.max(0, r.cps[i] - bg); sw += w; sx += w * r.xs[i]; });
+  const fw = xl != null && xr != null ? Math.abs(xr - xl) : NaN;
+  const p = r.pts[im];
+  result('Scan #' + r.id + ' (' + SCAN_NAME[r.type] + '): peak max at ' + AX[r.type] + ' = ' + r.xs[im].toFixed(4) + '° (' + ymax.toFixed(0) + ' cps), centroid ' + (sx / sw).toFixed(4) + '°' +
+         (r.type === '2theta-omega' ? ' [ω there = ' + p.om.toFixed(4) + '°]' : '') +
+         ', FWHM = ' + (isFinite(fw) ? fw.toFixed(4) + '° = ' + (fw * 3600).toFixed(1) + '″' : 'n/a (half maximum not reached inside the selection)') + ', background ≈ ' + bg.toFixed(1) + ' cps');
+}
+function measureMap(r, d, p, moved) {
+  const g = geomCache; let ks = [];
+  if (moved) { const xa = Math.min(d.x0, d.x1), xb = Math.max(d.x0, d.x1), ya = Math.min(d.y0, d.y1), yb = Math.max(d.y0, d.y1);
+    for (let k = 0; k < g.sx.length; k++) if (g.sx[k] >= xa && g.sx[k] <= xb && g.sy[k] >= ya && g.sy[k] <= yb && isFinite(r.cps[k])) ks.push(k); }
+  else { const k = nearestMap(p[0], p[1]); if (k >= 0) ks = [k]; }
+  if (!ks.length) return;
+  let km = ks[0]; ks.forEach(function (k) { if (r.cps[k] > r.cps[km]) km = k; });
+  const m = mapPoint(r, km);
+  let txt = 'RSM #' + r.id + ': maximum at ω = ' + m.om.toFixed(4) + '°, 2θ = ' + m.tth.toFixed(4) + '°, Qx = ' + m.qx.toFixed(5) + ', Qz = ' + m.qz.toFixed(5) + ' Å⁻¹ (' + m.cps.toFixed(0) + ' cps)';
+  if (ks.length > 4) {
+    const thr = r.cps[km] / 2; let sw = 0, so = 0, st2 = 0, sqx = 0, sqz = 0;
+    ks.forEach(function (k) { if (r.cps[k] < thr) return; const q = mapPoint(r, k), w = r.cps[k]; sw += w; so += w * q.om; st2 += w * q.tth; sqx += w * q.qx; sqz += w * q.qz; });
+    txt += '\n   centroid (points above half max in the box): ω = ' + (so / sw).toFixed(4) + '°, 2θ = ' + (st2 / sw).toFixed(4) + '°, Qx = ' + (sqx / sw).toFixed(5) + ', Qz = ' + (sqz / sw).toFixed(5) + ' Å⁻¹';
+  }
+  txt += '   [ω offset ' + (num('omOff') || 0) + '°]';
+  result(txt);
+}
+function setMode(m) { st.mode = m; $('mZoom').classList.toggle('on', m === 'zoom'); $('mMeas').classList.toggle('on', m === 'meas'); $('mGoto').classList.toggle('on', m === 'goto'); }
+$('mZoom').onclick = function () { setMode('zoom'); }; $('mMeas').onclick = function () { setMode('meas'); }; $('mGoto').onclick = function () { setMode('goto'); };
+$('btnReset').onclick = function () { st.view = null; draw(); };
+$('logY').onchange = function () { st.view = null; draw(); };
+['mapView', 'cmap', 'decades', 'omOff'].forEach(function (id) { $(id).addEventListener('input', function () { if (id === 'mapView' || id === 'omOff') st.view = null; draw(); }); });
+$('det').onchange = function () { $('slitBox').classList.toggle('hidden', $('det').value === 'ta'); log('Detector: ' + instLabel(instCfg())); };
+$('optics').onchange = function () { log('Incident optics: ' + instLabel(instCfg())); };
+$('slit').onchange = function () { log('Detector: ' + instLabel(instCfg())); };
+
+// ---------------------------------------------------------------- export
+$('btnCSV').onclick = function () {
+  const r = st.scans[st.sel]; if (!r) return;
+  const off = num('omOff') || 0, L = [];
+  L.push('# XRD Lab Simulator export'); L.push('# name: ' + r.who); L.push('# sample: ' + r.sampleId + ' (' + r.sample + ')'); L.push('# scan: ' + scanTitle(r));
+  L.push('# instrument: ' + r.instStr + ' (' + r.inst + '), Cu Ka1 lambda = ' + LAMBDA + ' A');
+  L.push('# definition: ' + r.defStr); L.push('# check: ' + r.stamp);
+  L.push('# count time per point (s): ' + r.time + '   omega offset used for Q (deg): ' + off + '   Q = 4 pi sin(theta)/lambda, Qx in-plane, Qz along the surface normal');
+  L.push('2theta_deg,omega_deg,phi_deg,chi_deg,Qx_invA,Qz_invA,counts,cps');
+  r.pts.forEach(function (p, i) { const q = angToQ(p.om, p.tth, off);
+    L.push([p.tth.toFixed(5), p.om.toFixed(5), p.phi.toFixed(4), p.chi.toFixed(4), q[0].toFixed(6), q[1].toFixed(6), r.counts[i], r.cps[i].toFixed(3)].join(',')); });
+  download((r.sample + '_scan' + r.id + '_' + r.type).replace(/[^\w.-]+/g, '_') + '.csv', L.join('\n') + '\n', 'text/csv');
+};
+$('btnPNG').onclick = function () { const r = st.scans[st.sel]; if (!r) return; const a = document.createElement('a'); a.href = cv.toDataURL('image/png'); a.download = (r.sample + '_scan' + r.id).replace(/[^\w.-]+/g, '_') + '.png'; a.click(); };
+$('btnLog').onclick = function () { download('xrd_instrument_log.txt', st.logLines.join('\n') + '\n'); };
+
+// ---------------------------------------------------------------- init
+showPos(); setScanType(); resizeCanvas();
+$('tg_tth').value = st.pos.tth; $('tg_om').value = st.pos.om; $('tg_phi').value = 0; $('tg_chi').value = 0;
+log('Instrument ready: ' + instLabel(instCfg()) + (DEV ? '  [LOCAL TEST MODE]' : ''));
+</script>
+</body>
+</html>
